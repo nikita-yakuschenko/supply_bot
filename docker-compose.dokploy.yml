@@ -1,0 +1,15 @@
+services:
+  foremans-orders-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: foremans-orders-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    command: ["python", "main.py"]
+    volumes:
+      - bot_data:/app/data
+
+volumes:
+  bot_data:
