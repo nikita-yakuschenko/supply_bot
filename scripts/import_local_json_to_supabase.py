@@ -10,14 +10,27 @@ from dotenv import load_dotenv
 from psycopg.types.json import Jsonb
 
 
+def _strip_host_scheme(value: str | None) -> str:
+    """Убирает https:// и http:// из хоста."""
+    if not value:
+        return value or ""
+    s = value.strip()
+    for prefix in ("https://", "http://"):
+        if s.lower().startswith(prefix):
+            return s[len(prefix) :].strip()
+    return s
+
+
 def resolve_database_url(cli_value: str | None) -> str | None:
     if cli_value:
         return cli_value
     env_url = os.getenv("DATABASE_URL")
     if env_url:
+        if "@https://" in env_url or "@http://" in env_url:
+            env_url = env_url.replace("@https://", "@").replace("@http://", "@")
         return env_url
 
-    supabase_host = os.getenv("SUPABASE_HOST")
+    supabase_host = _strip_host_scheme(os.getenv("SUPABASE_HOST"))
     postgres_password = os.getenv("POSTGRES_PASSWORD")
     if supabase_host and postgres_password:
         db = os.getenv("POSTGRES_DB", "postgres")
@@ -27,7 +40,7 @@ def resolve_database_url(cli_value: str | None) -> str | None:
         port = os.getenv("POOLER_PROXY_PORT_TRANSACTION", "6543")
         return f"postgresql://{user}:{postgres_password}@{supabase_host}:{port}/{db}"
 
-    host = os.getenv("SUPABASE_DB_HOST")
+    host = _strip_host_scheme(os.getenv("SUPABASE_DB_HOST"))
     port = os.getenv("SUPABASE_DB_PORT", "5432")
     db = os.getenv("SUPABASE_DB_NAME", "postgres")
     user = os.getenv("SUPABASE_DB_USER", "postgres")

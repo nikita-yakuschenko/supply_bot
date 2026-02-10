@@ -1,0 +1,1 @@
+fix: нормализация хоста БД — убираем https:// из DATABASE_URL и SUPABASE_HOST
