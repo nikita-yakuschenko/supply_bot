@@ -1,12 +1,17 @@
 import asyncio
 import logging
+import warnings
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ConversationHandler, CallbackQueryHandler
 from telegram import BotCommand, ReplyKeyboardMarkup, KeyboardButton, Update
 from telegram.ext import ContextTypes, Application
+from telegram.warnings import PTBUserWarning
 from config import Config
 from dotenv import load_dotenv
 import os
 from telegram.error import Forbidden
+
+# Убираем предупреждения PTB про per_message (у нас смесь MessageHandler и CallbackQueryHandler — оставляем per_message=False)
+warnings.filterwarnings("ignore", category=PTBUserWarning)
 
 # Импорты из ваших модулей
 from bot.commands import user, admin, utils
@@ -153,7 +158,7 @@ def setup_handlers(app):
             ),
         ],
         allow_reentry=True,
-        per_message=False
+        per_message=False,
     )
     app.add_handler(edit_handler)
     
@@ -173,7 +178,7 @@ def setup_handlers(app):
         },
         fallbacks=[MessageHandler(filters.Regex("^❌ Отмена$"), user.cancel)],
         allow_reentry=True,
-        per_message=False
+        per_message=False,
     )
     app.add_handler(delivery_handler)
     
@@ -205,7 +210,7 @@ def setup_handlers(app):
         },
         fallbacks=[MessageHandler(filters.Regex("^❌ Отмена$"), user.cancel)],
         allow_reentry=True,
-        per_message=False
+        per_message=False,
     )
     app.add_handler(checkin_handler)
     
@@ -225,7 +230,7 @@ def setup_handlers(app):
         },
         fallbacks=[MessageHandler(filters.Regex("^❌ Отмена$"), user.cancel)],
         allow_reentry=True,
-        per_message=False
+        per_message=False,
     )
     app.add_handler(refund_handler)
     
@@ -245,7 +250,7 @@ def setup_handlers(app):
         },
         fallbacks=[MessageHandler(filters.Regex("^❌ Отмена$"), user.cancel)],
         allow_reentry=True,
-        per_message=False
+        per_message=False,
     )
     app.add_handler(painting_handler)
     
@@ -399,6 +404,15 @@ async def setup_commands(app):
     ]
     await app.bot.set_my_commands(commands)
 
+def _shutdown_exception_handler(loop, context):
+    """Смягчает вывод при остановке: без длинного traceback для Ctrl+C и отмены задач."""
+    exc = context.get("exception")
+    if isinstance(exc, (KeyboardInterrupt, asyncio.CancelledError)):
+        logger.info("Остановка бота (завершение фоновых задач)...")
+        return
+    loop.default_exception_handler(context)
+
+
 async def main():
     """Запуск бота"""
     load_dotenv()
@@ -407,6 +421,9 @@ async def main():
     if not token:
         logger.error("Не указан токен бота в .env файле!")
         return
+    
+    loop = asyncio.get_running_loop()
+    loop.set_exception_handler(_shutdown_exception_handler)
     
     # Создаем экземпляр приложения бота
     app = Application.builder().token(token).build()
@@ -424,25 +441,23 @@ async def main():
     
     logger.info("Бот запущен. Нажмите Ctrl+C для остановки.")
     
-    # Ждем сигнал завершения
     try:
-        # Бесконечный цикл, чтобы бот работал до прерывания
         while True:
             await asyncio.sleep(1)
     except (KeyboardInterrupt, SystemExit):
         logger.info("Бот останавливается...")
     finally:
-        # Корректное завершение бота
         await app.updater.stop()
+        await asyncio.sleep(0.3)
         await app.stop()
         await app.shutdown()
+        logger.info("Бот завершил работу")
+
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        logger.info("Бот остановлен вручную")
+        pass
     except Exception as e:
         logger.error(f"Произошла ошибка при запуске бота: {e}")
-    finally:
-        logger.info("Бот завершил работу")
